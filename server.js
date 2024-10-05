@@ -1,33 +1,44 @@
+require('dotenv').config();
 const express = require('express');
-const bodyParser = require('body-parser');
+const multer = require('multer');
 const cors = require('cors');
+const path = require('path');
+const fs = require('fs');
+const { Configuration, OpenAIApi } = require("openai");
 
 const app = express();
-const port = process.env.PORT || 3000;
+const upload = multer({ dest: 'uploads/' });
 
-// Middleware
 app.use(cors());
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
 
-// Routes
-app.get('/', (req, res) => {
-  res.json({ message: 'Welcome to the Express API!' });
+// Configure OpenAI
+const configuration = new Configuration({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+const openai = new OpenAIApi(configuration);
+
+app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No audio file uploaded' });
+  }
+
+  try {
+    const resp = await openai.createTranscription(
+      fs.createReadStream(req.file.path),
+      "whisper-1"
+    );
+
+    // Delete the temporary file
+    fs.unlinkSync(req.file.path);
+
+    res.json({ transcription: resp.data.text });
+  } catch (error) {
+    console.error('Error during transcription:', error);
+    res.status(500).json({ error: 'An error occurred during transcription' });
+  }
 });
 
-// Example route with path parameter
-app.get('/api/users/:id', (req, res) => {
-  const userId = req.params.id;
-  res.json({ message: `Fetching user with ID: ${userId}` });
-});
-
-// Example POST route
-app.post('/api/users', (req, res) => {
-  const { name, email } = req.body;
-  res.json({ message: 'User created', user: { name, email } });
-});
-
-// Start the server
-app.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
